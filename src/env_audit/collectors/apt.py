@@ -1,6 +1,6 @@
 # src/env_audit/collectors/apt.py
 """
-APT package collector for env-audit.
+APT package collector for env-audit-poc.
 
 Parses the output of ``LANG=C apt list --installed`` into PackageRecord
 objects. Tested against fixture files; never touches the live system in
@@ -11,7 +11,6 @@ import os
 import re
 import shutil
 import subprocess
-from typing import Optional
 
 from env_audit.models import (
     InstallReason,
@@ -166,7 +165,7 @@ class AptCollector(Collector):
 
         return records
 
-    def _try_parse_semver(self, version: str) -> Optional[SemVer]:
+    def _try_parse_semver(self, version: str) -> SemVer | None:
         """
         Attempt to parse a Debian/Ubuntu version string as SemVer.
 

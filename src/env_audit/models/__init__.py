@@ -1,6 +1,6 @@
 # src/env_audit/models/__init__.py
 """
-Data models for env-audit.
+Data models for env-audit-poc.
 
 Import everything from submodules and re-export for a clean public API.
 """

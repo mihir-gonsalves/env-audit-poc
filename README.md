@@ -22,7 +22,7 @@ Modern development environments accumulate technical debt:
 
 There is no single tool that provides a complete, ecosystem-agnostic view of a developer machine.
 
-`env-audit` addresses this gap by generating a unified inventory and highlighting risks and redundancies without modifying the system.
+`env-audit-poc` addresses this gap by generating a unified inventory and highlighting risks and redundancies without modifying the system.
 
 ---
 
@@ -65,7 +65,7 @@ Support for additional ecosystems is intentionally straightforward to add via th
 
 ## Architecture Overview
 
-`env-audit` is structured as a layered, composable pipeline:
+`env-audit-poc` is structured as a layered, composable pipeline:
 
 ```text
  ------------------
@@ -230,32 +230,32 @@ All downstream analysis depends exclusively on this model.
 
 Run a full audit:
 ```bash
-env-audit
+env-audit-poc
 ```
 
 Render output in JSON:
 ```bash
-env-audit --format json
+env-audit-poc --format json
 ```
 
 Generate a Markdown report:
 ```bash
-env-audit --format markdown > report.md
+env-audit-poc --format markdown > report.md
 ```
 
 Restrict collectors:
 ```bash
-env-audit --collectors apt,pip
+env-audit-poc --collectors apt,pip
 ```
 
 Skip failing collectors and continue:
 ```bash
-env-audit --skip-failing
+env-audit-poc --skip-failing
 ```
 
 Increase verbosity:
 ```bash
-env-audit -vv
+env-audit-poc -vv
 ```
 
 ---
@@ -283,7 +283,7 @@ Multiple Python versions installed. `python3.11` takes precedence via symlink.
 
 ## Known Limitations
 
-`env-audit` makes best-effort attempts to provide accurate information, but some limitations are inherent to system-level auditing:
+`env-audit-poc` makes best-effort attempts to provide accurate information, but some limitations are inherent to system-level auditing:
 
 ### PATH Resolution
 - Reports PATH state **at audit time only**
@@ -332,7 +332,7 @@ These limitations are documented to set appropriate expectations and avoid false
 
 ---
 
-## Extending env-audit
+## Extending env-audit-poc
 
 To add support for a new ecosystem:
 

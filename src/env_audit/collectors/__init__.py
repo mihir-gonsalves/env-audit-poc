@@ -1,6 +1,6 @@
 # src/env_audit/collectors/__init__.py
 """
-Package collectors for env-audit.
+Package collectors for env-audit-poc.
 
 Each collector is responsible for a single ecosystem.  Import the
 concrete collectors directly; this module re-exports the public API

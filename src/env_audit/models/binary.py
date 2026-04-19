@@ -1,6 +1,6 @@
 # src/env_audit/models/binary.py
 """
-Binary executable models for env-audit.
+Binary executable models for env-audit-poc.
 """
 
 from enum import Enum
@@ -37,9 +37,11 @@ class BinaryRecord(BaseModel):
     @field_validator("path")
     @classmethod
     def validate_absolute_path(cls, v: str) -> str:
-        """Ensure path is absolute and non-trivial."""
-        if not v.startswith("/") or v == "/":
-            raise ValueError(f"Path must be absolute and non-root, got: {v!r}")
+        """Ensure path is absolute and non-root."""
+        if not v.startswith("/"):
+            raise ValueError(f"Path must be absolute, got: {v!r}")
+        if v == "/":
+            raise ValueError(f"Path must be non-root, got: {v!r}")
         return v
 
     @model_validator(mode="after")

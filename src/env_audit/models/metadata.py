@@ -1,6 +1,6 @@
 # src/env_audit/models/metadata.py
 """
-Package metadata models for env-audit.
+Package metadata models for env-audit-poc.
 """
 
 from datetime import datetime

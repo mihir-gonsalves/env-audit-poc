@@ -1,6 +1,6 @@
 # src/env_audit/models/package.py
 """
-Core package record models for env-audit.
+Core package record models for env-audit-poc.
 """
 
 import functools

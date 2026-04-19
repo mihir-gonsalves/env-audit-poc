@@ -1,6 +1,6 @@
 # src/env_audit/collectors/base.py
 """
-Collector base class and exception hierarchy for env-audit.
+Collector base class and exception hierarchy for env-audit-poc.
 """
 
 from abc import ABC, abstractmethod

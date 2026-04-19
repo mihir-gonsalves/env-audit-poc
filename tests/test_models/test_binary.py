@@ -63,7 +63,7 @@ class TestBinaryRecord:
 
     def test_path_cannot_be_root(self) -> None:
         """Test that '/' alone is rejected as a binary path."""
-        with pytest.raises(ValidationError, match="Path must be absolute"):
+        with pytest.raises(ValidationError, match="Path must be non-root"):
             BinaryRecord(
                 name="python3",
                 path="/",
