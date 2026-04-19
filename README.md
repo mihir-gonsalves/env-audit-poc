@@ -390,7 +390,7 @@ class BrewCollector(Collector):
 
 ## Development Status
 
-See [PROJECT_STATUS.md](PROJECT_STATUS.md) for current implementation progress.
+Phase 3 (CLI, orchestrator, renderers) is complete. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for current implementation progress.
 
 ---
 

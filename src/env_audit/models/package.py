@@ -76,9 +76,9 @@ class SemVer(BaseModel):
         # Equal cores: prerelease lowers precedence per SemVer spec.
         # None (release) > any prerelease string.
         if self.prerelease is None and other.prerelease is not None:
-            return False  # self is release, other is prerelease → self > other
+            return False  # self is release, other is prerelease -> self > other
         if self.prerelease is not None and other.prerelease is None:
-            return True   # self is prerelease, other is release → self < other
+            return True   # self is prerelease, other is release -> self < other
 
         # Both have prerelease or both don't — compare lexicographically.
         return (self.prerelease or "") < (other.prerelease or "")

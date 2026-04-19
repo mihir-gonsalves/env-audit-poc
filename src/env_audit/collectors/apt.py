@@ -43,9 +43,9 @@ _LINE_RE = re.compile(
 )
 
 # Best-effort SemVer extraction from Debian/Ubuntu version strings, e.g.:
-#   3.11.6-1~22.04   →  3.11.6-pre=1~22.04
-#   2:8.2.3995-1ubuntu2.17   →  (epoch stripped) 8.2.3995-pre=1ubuntu2.17
-#   3.118ubuntu5     →  no match (no separator before "ubuntu")
+#   3.11.6-1~22.04   ->  3.11.6-pre=1~22.04
+#   2:8.2.3995-1ubuntu2.17   ->  (epoch stripped) 8.2.3995-pre=1ubuntu2.17
+#   3.118ubuntu5     ->  no match (no separator before "ubuntu")
 _VERSION_RE = re.compile(
     r"^(?:\d+:)?"                       # optional epoch  (e.g. "2:")
     r"(?P<major>\d+)"                   # major  (required)
