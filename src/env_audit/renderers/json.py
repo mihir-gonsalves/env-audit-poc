@@ -2,8 +2,8 @@
 """
 JSON renderer for env-audit-poc.
 
-Uses Pydantic's built-in JSON serialisation so the output is
-guaranteed to round-trip back to ``PackageRecord`` objects.
+Uses Pydantic's built-in serialisation so the output is guaranteed to
+round-trip back to ``PackageRecord`` objects.
 """
 
 import json as _json
@@ -22,11 +22,9 @@ class JsonRenderer(Renderer):
         """
         Return a JSON array of serialised ``PackageRecord`` objects.
 
-        ``model_dump(mode='json')`` is used instead of the
-        ``model_dump_json()`` + ``json.loads()`` round-trip: it produces
-        a JSON-compatible dict directly, coercing enums and datetimes to
-        their serialisable equivalents without the intermediate string
-        allocation.
+        ``model_dump(mode='json')`` produces a JSON-compatible dict
+        directly, coercing enums, datetimes, and nested models to their
+        serialisable equivalents without an intermediate string round-trip.
 
         The returned string always ends with ``'\\n'``.
         """

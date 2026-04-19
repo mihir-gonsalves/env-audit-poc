@@ -390,7 +390,7 @@ class BrewCollector(Collector):
 
 ## Development Status
 
-Phase 3 (CLI, orchestrator, renderers) is complete. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for current implementation progress.
+Phase 3 complete: CLI, orchestrator, and both renderers (JSON and table) are implemented and fully tested. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for current implementation progress and Phase 4 plan.
 
 ---
 

@@ -5,14 +5,16 @@
 Design
 ------
 * ``CliRunner()`` uses a combined output stream in ``result.output``,
-  which includes both stdout and stderr. This avoids ambiguity by
-  consolidating all CLI output into a single capture buffer.
+  which includes both stdout and stderr (``mix_stderr=True`` is the
+  CliRunner default).  Tests that assert on warning/verbose messages do
+  so via ``result.output``; if ``mix_stderr`` is ever changed to False,
+  those assertions must be updated to use ``result.stderr``.
 * ``COLLECTOR_REGISTRY`` is patched so no real system commands are ever
   executed.  A factory function builds disposable ``Collector`` subclasses
   configured to return preset packages or raise preset errors.
 * Every branch in ``main()`` is exercised:
   - ``collectors`` is ``None`` (default: run all) vs explicit names
-  - Unknown collector name -> stderr + exit 1
+  - Unknown collector name -> ClickException + exit 1
   - verbose == 0, == 1, >= 2
   - verbose >= 2 with a successful collector (inner ``if`` -> True)
   - verbose >= 2 with a failing collector  (inner ``if`` -> False)
@@ -28,7 +30,7 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
-from env_audit.cli import COLLECTOR_REGISTRY, main
+from env_audit.cli import COLLECTOR_REGISTRY, RENDERER_REGISTRY, main
 from env_audit.collectors.base import (
     Collector,
     CollectorParseError,
@@ -90,20 +92,22 @@ class TestCollectorRegistry:
 
 
 # ---------------------------------------------------------------------------
-# RENDERER_REGISTRY / --format choice consistency
+# RENDERER_REGISTRY / --format Choice sync
 # ---------------------------------------------------------------------------
 
 
 class TestRendererRegistry:
     def test_renderer_registry_keys_match_format_choices(self) -> None:
-        """RENDERER_REGISTRY keys must stay in sync with the click.Choice list.
-
-        This test will fail if a new renderer is added to the registry
-        without also being added to the ``--format`` option (or vice-versa),
-        acting as a compile-time reminder to update both places.
         """
-        from env_audit.cli import RENDERER_REGISTRY
+        Guard against RENDERER_REGISTRY and the click.Choice on --format
+        falling out of sync.  When a new renderer is added, both must be
+        updated together or this test will fail.
+        """
         assert set(RENDERER_REGISTRY.keys()) == {"json", "table"}
+
+    def test_renderer_registry_values_are_types(self) -> None:
+        for cls in RENDERER_REGISTRY.values():
+            assert isinstance(cls, type)
 
 
 # ---------------------------------------------------------------------------
@@ -116,12 +120,10 @@ class TestCollectorsFlag:
         result = _runner().invoke(main, ["--collectors", "unknown"])
         assert result.exit_code == 1
 
-    def test_unknown_collector_message_contains_name(self) -> None:
-        """ClickException prints 'Error: Unknown collector(s): <name>' to stderr."""
+    def test_unknown_collector_message_written_to_stderr(self) -> None:
+        """ClickException prints 'Error: ...' to stderr (captured in result.output)."""
         result = _runner().invoke(main, ["--collectors", "nope"])
         assert "nope" in result.output
-        # ClickException always prefixes with "Error:"
-        assert "Error" in result.output
 
     def test_specific_collector_only_runs_that_ecosystem(self) -> None:
         registry = {

@@ -5,8 +5,6 @@ Click-based CLI for env-audit-poc.
 Entry point: ``env-audit-poc`` (wired in pyproject.toml).
 """
 
-import sys
-
 import click
 
 from env_audit.collectors import AptCollector
@@ -14,23 +12,19 @@ from env_audit.orchestrator import Orchestrator
 from env_audit.renderers.json import JsonRenderer
 from env_audit.renderers.table import TableRenderer
 
-__all__ = ["main", "COLLECTOR_REGISTRY", "RENDERER_REGISTRY"]
+__all__ = ["main", "COLLECTOR_REGISTRY"]
 
 # ---------------------------------------------------------------------------
-# Registries — extend these as new collectors / renderers are added.
-#
-# COLLECTOR_REGISTRY: maps ecosystem name -> Collector subclass.
-#   Patched in tests to avoid touching the live system.
-#
-# RENDERER_REGISTRY: maps --format value -> Renderer subclass.
-#   Keys here must stay in sync with the click.Choice list on --format.
-#   Exported so tests can assert that the two stay consistent.
+# Registries — extend these as new collectors / renderers are added
 # ---------------------------------------------------------------------------
 
 COLLECTOR_REGISTRY: dict[str, type] = {
     "apt": AptCollector,
 }
 
+# RENDERER_REGISTRY is intentionally not in __all__: it is an internal
+# implementation detail. The available format names are enforced by the
+# click.Choice on --format; both must be kept in sync when adding renderers.
 RENDERER_REGISTRY: dict[str, type] = {
     "json": JsonRenderer,
     "table": TableRenderer,
@@ -122,4 +116,4 @@ def main(
     click.echo(RENDERER_REGISTRY[output_format]().render(result.packages), nl=False)
 
     if result.errors and not skip_failing:
-        sys.exit(1)
+        raise SystemExit(1)
