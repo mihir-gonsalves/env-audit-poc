@@ -7,6 +7,10 @@ concrete collectors directly; this module re-exports the public API
 and the exception hierarchy so callers need only one import path.
 """
 
+"""
+Package collectors for env-audit-poc.
+"""
+
 from .apt import AptCollector
 from .base import (
     Collector,
@@ -15,15 +19,18 @@ from .base import (
     CollectorTimeoutError,
     CollectorUnavailableError,
 )
+from .manual import ManualBinaryCollector
+from .npm import NpmCollector
+from .pip import PipCollector
 
 __all__ = [
-    # concrete collectors
     "AptCollector",
-    # base / ABC
     "Collector",
-    # exceptions
     "CollectorError",
     "CollectorParseError",
     "CollectorTimeoutError",
     "CollectorUnavailableError",
+    "ManualBinaryCollector",
+    "NpmCollector",
+    "PipCollector",
 ]

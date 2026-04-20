@@ -1,0 +1,11 @@
+[
+  {"name": "click", "version": "8.1.7"},
+  {"name": "pip", "version": "23.3.2"},
+  {"name": "pydantic", "version": "2.5.3"},
+  {"name": "pydantic-core", "version": "2.14.6"},
+  {"name": "rich", "version": "13.7.0"},
+  {"name": "setuptools", "version": "68.2.2"},
+  {"name": "some-editable", "version": "0.1.0-dev1"},
+  {"name": "typing-extensions", "version": "4.9.0"},
+  {"name": "wheel", "version": "0.41.3"}
+]

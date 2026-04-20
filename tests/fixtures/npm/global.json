@@ -1,0 +1,31 @@
+{
+  "version": "10.2.4",
+  "name": "",
+  "dependencies": {
+    "npm": {
+      "version": "10.2.4",
+      "resolved": "https://registry.npmjs.org/npm/-/npm-10.2.4.tgz",
+      "overridden": false
+    },
+    "typescript": {
+      "version": "5.3.3",
+      "resolved": "https://registry.npmjs.org/typescript/-/typescript-5.3.3.tgz",
+      "overridden": false
+    },
+    "yarn": {
+      "version": "1.22.21",
+      "resolved": "https://registry.npmjs.org/yarn/-/yarn-1.22.21.tgz",
+      "overridden": false
+    },
+    "@angular/cli": {
+      "version": "17.0.6",
+      "resolved": "https://registry.npmjs.org/@angular/cli/-/cli-17.0.6.tgz",
+      "overridden": false
+    },
+    "create-react-app": {
+      "version": "5.0.1",
+      "resolved": "https://registry.npmjs.org/create-react-app/-/create-react-app-5.0.1.tgz",
+      "overridden": false
+    }
+  }
+}

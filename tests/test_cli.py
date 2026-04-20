@@ -4,16 +4,10 @@
 
 Design
 ------
-* ``CliRunner()`` uses a combined output stream in ``result.output``,
-  which includes both stdout and stderr (``mix_stderr=True`` is the
-  CliRunner default).  Tests that assert on warning/verbose messages do
-  so via ``result.output``; if ``mix_stderr`` is ever changed to False,
-  those assertions must be updated to use ``result.stderr``.
-* ``COLLECTOR_REGISTRY`` is patched so no real system commands are ever
-  executed.  A factory function builds disposable ``Collector`` subclasses
-  configured to return preset packages or raise preset errors.
+* ``CliRunner()`` captures both stdout and stderr (``mix_stderr=True`` default).
+* ``COLLECTOR_REGISTRY`` is patched so no real system commands run.
 * Every branch in ``main()`` is exercised:
-  - ``collectors`` is ``None`` (default: run all) vs explicit names
+  - ``collectors`` is None (all) vs explicit names
   - Unknown collector name -> ClickException + exit 1
   - verbose == 0, == 1, >= 2
   - verbose >= 2 with a successful collector (inner ``if`` -> True)
@@ -49,7 +43,6 @@ def _make_collector_class(
     packages: list[PackageRecord] | None = None,
     error: Exception | None = None,
 ) -> type:
-    """Return a ``Collector`` subclass pre-configured for tests."""
     _pkgs = packages or []
     _err = error
 
@@ -86,6 +79,15 @@ class TestCollectorRegistry:
     def test_apt_is_registered(self) -> None:
         assert "apt" in COLLECTOR_REGISTRY
 
+    def test_pip_is_registered(self) -> None:
+        assert "pip" in COLLECTOR_REGISTRY
+
+    def test_npm_is_registered(self) -> None:
+        assert "npm" in COLLECTOR_REGISTRY
+
+    def test_manual_is_registered(self) -> None:
+        assert "manual" in COLLECTOR_REGISTRY
+
     def test_registry_values_are_types(self) -> None:
         for cls in COLLECTOR_REGISTRY.values():
             assert isinstance(cls, type)
@@ -98,11 +100,6 @@ class TestCollectorRegistry:
 
 class TestRendererRegistry:
     def test_renderer_registry_keys_match_format_choices(self) -> None:
-        """
-        Guard against RENDERER_REGISTRY and the click.Choice on --format
-        falling out of sync.  When a new renderer is added, both must be
-        updated together or this test will fail.
-        """
         assert set(RENDERER_REGISTRY.keys()) == {"json", "table"}
 
     def test_renderer_registry_values_are_types(self) -> None:
@@ -121,7 +118,6 @@ class TestCollectorsFlag:
         assert result.exit_code == 1
 
     def test_unknown_collector_message_written_to_stderr(self) -> None:
-        """ClickException prints 'Error: ...' to stderr (captured in result.output)."""
         result = _runner().invoke(main, ["--collectors", "nope"])
         assert "nope" in result.output
 
@@ -179,12 +175,10 @@ class TestFormatFlag:
         assert "myvim" in result.output
 
     def test_default_format_is_table(self) -> None:
-        """No --format flag -> table output (not raw JSON)."""
         registry = {"mock": _make_collector_class(packages=[_pkg()])}
         with patch("env_audit.cli.COLLECTOR_REGISTRY", registry):
             result = _runner().invoke(main, [])
         assert result.exit_code == 0
-        # Table output contains column headers; JSON output would not.
         assert "Name" in result.output
 
 
@@ -256,35 +250,23 @@ class TestVerboseFlag:
         assert "mock" in result.output
 
     def test_verbose_2_shows_per_collector_package_count(self) -> None:
-        """Covers the ``if collector.ecosystem not in result.errors`` True branch."""
         registry = {"mock": _make_collector_class(packages=[_pkg(), _pkg("git")])}
         with patch("env_audit.cli.COLLECTOR_REGISTRY", registry):
             result = _runner().invoke(main, ["-vv"])
         assert result.exit_code == 0
-        # The per-collector line mentions the ecosystem and package count
         assert "mock" in result.output
         assert "package" in result.output
 
     def test_verbose_2_failed_collector_skips_package_count_line(self) -> None:
-        """Covers the ``if collector.ecosystem not in result.errors`` False branch.
-
-        When a collector fails its ecosystem IS in ``result.errors``, so
-        the per-collector success detail line must NOT be emitted.
-        The warning IS printed (from the earlier loop), but the count line
-        inside the ``if`` block is skipped.
-        """
         error = CollectorUnavailableError("mock", "missing binary")
         registry = {"mock": _make_collector_class(error=error)}
         with patch("env_audit.cli.COLLECTOR_REGISTRY", registry):
             result = _runner().invoke(main, ["-vv", "--skip-failing"])
         assert result.exit_code == 0
-        # Warning is always emitted
         assert "Warning" in result.output
-        # The "N package(s) collected" line must NOT appear for the failed collector
         assert "package(s) collected" not in result.output
 
     def test_verbose_2_mix_of_success_and_failure(self) -> None:
-        """Both branches of the inner ``if`` hit in a single run."""
         pkg = _pkg("vim", "good")
         error = CollectorUnavailableError("bad", "not installed")
         registry = {
@@ -294,5 +276,5 @@ class TestVerboseFlag:
         with patch("env_audit.cli.COLLECTOR_REGISTRY", registry):
             result = _runner().invoke(main, ["-vv", "--skip-failing"])
         assert result.exit_code == 0
-        assert "good" in result.output   # appears in the count line
-        assert "Warning" in result.output # appears for the bad collector
+        assert "good" in result.output
+        assert "Warning" in result.output
