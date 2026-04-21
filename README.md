@@ -6,9 +6,69 @@ It is designed for developers who have accumulated tools over time using differe
 
 This project prioritizes correctness, transparency, and extensibility over automation or cleanup.
 
-Note: This project is a proof of concept. It will eventually be rewritten in Go for performance reasons.
+> **Note:** This project is a proof of concept and will eventually be rewritten in Go for performance reasons.
 
----
+## How To Use
+
+### Installation
+
+Create and activate a virtual environment, then install in editable mode:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+### Basic Usage
+
+Run a full audit across all supported ecosystems:
+
+```bash
+env-audit-poc
+```
+
+This collects packages from `apt`, `pip`, `npm`, and manual binary directories, normalizes the results, runs all analyzers, and prints a package table followed by an analysis findings table.
+
+### Common Invocations
+
+| Goal | Command |
+|------|---------|
+| Full audit, default table output | `env-audit-poc` |
+| Machine-readable JSON | `env-audit-poc --format json` |
+| Specific ecosystems only | `env-audit-poc --collectors apt,pip` |
+| Skip the analysis step | `env-audit-poc --no-analyze` |
+| Continue if a collector fails | `env-audit-poc --skip-failing` |
+| Collector summary (stderr) | `env-audit-poc -v` |
+| Full per-collector detail (stderr) | `env-audit-poc -vv` |
+| Redirect output to a file | `env-audit-poc --format json > audit.json` |
+
+### Understanding the Output
+
+**Package table** — one row per unique `(ecosystem, name)` pair after normalization. Intra-ecosystem duplicates are collapsed to the highest parsed version.
+
+**Analysis Findings table** — printed below the package table when any findings exist. Findings are sorted by severity (`warning` before `info`). Each row shows:
+
+- **Severity** — `warning` or `info`
+- **Kind** — the finding type (`cross_ecosystem_duplicate`, `path_shadow`, `orphaned_binary`)
+- **Message** — a human-readable explanation
+
+**JSON output** — a top-level object with two keys:
+
+```json
+{
+  "packages": [ { "name": "...", "ecosystem": "...", ... } ],
+  "findings": [ { "kind": "...", "severity": "...", "message": "..." } ]
+}
+```
+
+### Verbosity Flags
+
+`-v` prints a one-line collector summary and total finding count to stderr — useful when piping stdout elsewhere.
+
+`-vv` adds per-collector package counts and per-analyzer finding counts to stderr.
+
+Both flags write to stderr so they never pollute piped output.
 
 ## Problem Statement
 
@@ -24,8 +84,6 @@ There is no single tool that provides a complete, ecosystem-agnostic view of a d
 
 `env-audit-poc` addresses this gap by generating a unified inventory and highlighting risks and redundancies without modifying the system.
 
----
-
 ## Non-Goals
 
 This tool intentionally does **not**:
@@ -36,8 +94,6 @@ This tool intentionally does **not**:
 - Act as a configuration management system
 
 All output is advisory and explainable.
-
----
 
 ## Key Features
 
@@ -50,24 +106,20 @@ All output is advisory and explainable.
 - Machine-readable and human-readable output formats
 - Graceful degradation when collectors fail
 
----
-
-## Supported Ecosystems (Initial Scope)
+## Supported Ecosystems
 
 - System packages (`apt`)
 - Python (`pip`, system and user)
 - Node.js (`npm -g`)
-- Manually installed binaries (`/usr/local/bin`, `~/bin`)
+- Manually installed binaries (`/usr/local/bin`, `~/bin`, `~/.local/bin`)
 
-Support for additional ecosystems is intentionally straightforward to add via the plugin architecture.
-
----
+Support for additional ecosystems is straightforward to add via the plugin architecture.
 
 ## Architecture Overview
 
 `env-audit-poc` is structured as a layered, composable pipeline:
 
-```text
+```
  ------------------
 |       CLI        |
  ------------------
@@ -103,7 +155,7 @@ All collectors implement the `Collector` interface:
 
 ```python
 class Collector(ABC):
-    DEFAULT_TIMEOUT: float = 30.0  # override per subclass
+    DEFAULT_TIMEOUT: float = 30.0
 
     @property
     @abstractmethod
@@ -112,64 +164,47 @@ class Collector(ABC):
 
     @abstractmethod
     def is_available(self) -> bool:
-        """Return True if this collector can run on the current system.
-        Must not raise — return False instead."""
+        """Return True if this collector can run on the current system."""
 
     @abstractmethod
     def collect(self) -> list[PackageRecord]:
-        """Gather and normalise package data. Raises CollectorError
-        subclasses on failure; never modifies system state."""
+        """Gather and normalize package data. Raises CollectorError on failure."""
 ```
 
 Collectors raise typed errors that the orchestrator catches per-collector:
 
 ```python
-CollectorError              # base
+CollectorError
 ├── CollectorUnavailableError(ecosystem, reason)
 ├── CollectorTimeoutError(ecosystem, timeout)
 └── CollectorParseError(ecosystem, detail)
 ```
 
-Collectors are:
-- **Independent**: One failing collector does not stop others
-- **Time-bounded**: Subject to configurable timeouts
-- **Locale-aware**: Set `LANG=C` to ensure consistent output parsing
-
-Examples:
-- `AptCollector`
-- `PipCollector`
-- `NpmCollector`
-- `ManualBinaryCollector`
-
 ### Normalizer
 
-The normalization layer converts heterogeneous raw data into a canonical model with version parsing and binary resolution.
+The normalization layer converts heterogeneous raw data into a canonical, sorted, deduplicated list.
 
-- Resolves symlinks and binary ownership
-- Performs best-effort version normalization
-- Attaches confidence scores
-- Does not infer intent or usage
+- Collapses intra-ecosystem duplicates (keeps highest parsed version)
+- Sorts by `(ecosystem, name)` for deterministic output
+- Tracks cross-ecosystem duplicates for downstream analyzers
 
 ### Analyzers
 
-Analyzers operate on normalized data and generate explainable insights.
+Analyzers operate on the normalized package list and return typed `Finding` objects.
 
-Examples:
-- Duplicate versions of the same tool
-- PATH shadowing between binaries (at audit time)
-- Orphaned binaries without a known owner
-- Package size and installation date analysis
+| Analyzer | Finding Kind | Severity | Description |
+|----------|-------------|----------|-------------|
+| `DuplicateAnalyzer` | `cross_ecosystem_duplicate` | `warning` | Same package name in multiple ecosystems |
+| `PathShadowAnalyzer` | `path_shadow` | `warning` | Binary name collision resolved by PATH order |
+| `OrphanedBinaryAnalyzer` | `orphaned_binary` | `info` | Manually installed binary with no known package owner |
 
 ### Renderers
 
 Renderers are responsible only for output formatting.
 
 Supported formats:
-- Table (terminal-friendly)
-- JSON
-- Markdown
-
----
+- **Table** — Rich-powered terminal table (default)
+- **JSON** — structured object with `packages` and `findings` arrays
 
 ## Core Data Model
 
@@ -178,12 +213,12 @@ The canonical unit of information is a `PackageRecord`:
 ```python
 class PackageRecord(BaseModel):
     name: str
-    version_raw: str | None             # Original version string from source
-    version_parsed: SemVer | None       # Parsed semantic version (best-effort)
-    ecosystem: str                      # How the package is managed (apt, pip, npm)
-    source: str                         # Where it originated (repo, tap, index, manual)
+    version_raw: str | None
+    version_parsed: SemVer | None
+    ecosystem: str
+    source: str
     install_path: str | None
-    binaries: list[BinaryRecord]        # Linked binaries with confidence levels
+    binaries: list[BinaryRecord]
     metadata: PackageMetadata
 ```
 
@@ -200,182 +235,92 @@ class BinaryRecord(BaseModel):
     symlink_target: str | None
 ```
 
-Confidence levels:
-- **High**: Binary directly provided by package manifest
-- **Medium**: Binary found via heuristics (naming, location)
-- **Low**: Binary found but ownership unclear
-
 ### Metadata Model
-
-Package metadata uses a hybrid approach with typed core fields and flexible extensions:
 
 ```python
 class PackageMetadata(BaseModel):
-    # Core fields that analyzers can depend on
     install_date: datetime | None = None
     install_reason: Literal["explicit", "dependency", "unknown"] | None = None
     size_bytes: int | None = None
-    
-    # Ecosystem-specific extensions, clearly namespaced (e.g., "apt:architecture")
-    extensions: dict[str, Any] = field(default_factory=dict)
+    extensions: dict[str, Any] = {}   # must use "ecosystem:key" format
 ```
-
-All extension keys must use the `ecosystem:key` naming convention to prevent collisions.
-
-All downstream analysis depends exclusively on this model.
-
----
-
-## Usage
-
-Run a full audit:
-```bash
-env-audit-poc
-```
-
-Render output in JSON:
-```bash
-env-audit-poc --format json
-```
-
-Generate a Markdown report:
-```bash
-env-audit-poc --format markdown > report.md
-```
-
-Restrict collectors:
-```bash
-env-audit-poc --collectors apt,pip
-```
-
-Skip failing collectors and continue:
-```bash
-env-audit-poc --skip-failing
-```
-
-Increase verbosity:
-```bash
-env-audit-poc -vv
-```
-
----
-
-## Example Output (Abbreviated)
-
-```bash
-Package: python3
-Versions detected: 2
-  - python3.10 (apt, /usr/bin/python3.10)
-  - python3.11 (apt, /usr/bin/python3.11)
-
-Binary Resolution:
-  /usr/bin/python3 → python3.11 (high confidence)
-  
-PATH Analysis:
-  Resolved version: /usr/bin/python3.11
-  Shadowed versions: python3.10 (not in PATH priority)
-```
-
-**Insight:**
-Multiple Python versions installed. `python3.11` takes precedence via symlink.
-
----
 
 ## Known Limitations
-
-`env-audit-poc` makes best-effort attempts to provide accurate information, but some limitations are inherent to system-level auditing:
 
 ### PATH Resolution
 - Reports PATH state **at audit time only**
 - Does not parse shell configuration files (`.bashrc`, `.zshrc`)
 - Cannot detect runtime PATH modifications (virtual environments, direnv)
-- Shell aliases and functions may override binaries
 
 ### Version Detection
 - Version parsing is best-effort and ecosystem-dependent
 - Some binaries lack standardized version output
-- Version comparison may fail for non-semantic versions
-- Keeps both raw and parsed versions for transparency
+- Non-semantic versions (`3.118ubuntu5`) are stored as `version_raw` with `version_parsed = None`
 
 ### Binary Ownership
 - Ownership detection uses heuristics for manual installs
 - Symlink chains may be ambiguous
-- Confidence levels reflect uncertainty
-
-### Performance
-- Collectors run serially by default
-- Large package sets may take time to scan
-- Filesystem scanning depends on directory size
-
-These limitations are documented to set appropriate expectations and avoid false confidence.
-
----
+- Confidence levels reflect this uncertainty
 
 ## Safety and Trust Model
 
-- No commands are run with elevated privileges by default
+- No commands are run with elevated privileges
 - No files are modified
 - No network access is required
 - All heuristics are transparent and explainable
 - Collectors fail independently without stopping the audit
-- All collectors are subject to timeouts
+- All collectors are subject to configurable timeouts
 
----
+## Testing
 
-## Testing Strategy
+Run the full test suite:
 
-- **Collectors**: Tested using fixture files with real command output from multiple OS versions
-- **Normalization and analyzers**: Unit-tested with comprehensive edge cases
-- **Integration tests**: Use isolated filesystem fixtures
-- **Locale testing**: Explicitly test with `LANG=C` and other locales
-- **No environment dependence**: Tests never rely on the developer's actual machine state
+```bash
+pytest
+```
 
----
+Coverage report:
+
+```bash
+pytest --cov=src/env_audit --cov-report=term-missing
+```
+
+Tests never depend on the developer's actual system — all collector tests use fixture files with captured command output.
 
 ## Extending env-audit-poc
 
-To add support for a new ecosystem:
+To add a new ecosystem:
 
 1. Implement the `Collector` interface
 2. Map raw output to the canonical `PackageRecord` model
 3. Use namespaced extensions for ecosystem-specific metadata
-4. Register the collector in the plugin system
+4. Register the collector in `COLLECTOR_REGISTRY` in `cli.py`
 5. Add fixture files for testing
 
 No changes to analyzers or renderers are required.
-
-Example:
 
 ```python
 class BrewCollector(Collector):
     @property
     def ecosystem(self) -> str:
         return "brew"
-    
+
     def is_available(self) -> bool:
         return shutil.which("brew") is not None
-    
+
     def collect(self) -> list[PackageRecord]:
-        # Implementation
-        return [
-            PackageRecord(
-                name="wget",
-                version_raw="1.21.3",
-                version_parsed=SemVer(major=1, minor=21, patch=3),
-                ecosystem="brew",
-                source="homebrew/core",
-                metadata=PackageMetadata(
-                    install_reason=InstallReason.EXPLICIT,
-                    extensions={
-                        "brew:formula": "wget",
-                        "brew:tap": "homebrew/core"
-                    }
-                )
-            )
-        ]
+        ...
 ```
 
----
+To add a new analyzer:
+
+1. Subclass `Analyzer` and `Finding`
+2. Implement `analyze(packages) -> list[Finding]`
+3. Register in `ANALYZER_REGISTRY` in `cli.py`
+
+## Development Status
+
+Proof of concept complete. A rewrite in Go is planned.
 
 ## Project Philosophy
 
@@ -386,50 +331,8 @@ class BrewCollector(Collector):
 - Fail gracefully and explain limitations
 - Provide actionable, explainable insights
 
----
-
-## Development Status
-
-Phase 3 complete: CLI, orchestrator, and both renderers (JSON and table) are implemented and fully tested. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for current implementation progress and Phase 4 plan.
-
----
-
-## Setup
-
-Create virtual environment:
-```bash
-python -m venv .venv
-```
-
-Active venv:
-```bash
-source .venv/bin/activate
-```
-
-Install the project in editable mode:
-```bash
-pip install -e ".[dev]"
-```
----
-
-## Test
-
-With pytest:
-```bash
-pytest
-```
-
-## Future Goals
-
-- Expand supported ecosystems (Docker images, gem, Maven, Go modules)
-- Parallel collector execution for performance
-- Interactive TUI mode for exploration
-- Configuration file support for customization
-
----
-
 ## License
 
-```text
+```
 MIT
 ```
