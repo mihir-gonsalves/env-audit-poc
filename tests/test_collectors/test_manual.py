@@ -4,25 +4,22 @@
 
 Design principles
 -----------------
-* A temporary filesystem fixture is built using ``tmp_path`` — tests never
+* A temporary filesystem fixture is built using ``tmp_path`` - tests never
   read the live system.
-* Every branch in ``collect()``, ``_scan_directory()``, the helper functions
-  (``_is_executable_file``, ``_is_symlink``, ``_symlink_target``), and
-  ``is_available()`` is exercised.
+* Every branch in ``collect()``, ``_scan_directory()`` and ``is_available()``
+  is exercised.  The shared filesystem helpers this collector builds on
+  live in ``env_audit.collectors.fsutil`` and are covered by
+  ``tests/test_collectors/test_fsutil.py``.
 """
 
-import os
-import stat
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from env_audit.collectors.manual import (
+    MANUAL_ECOSYSTEM,
     ManualBinaryCollector,
-    _is_executable_file,
-    _is_symlink,
-    _symlink_target,
     DEFAULT_SCAN_DIRS,
 )
 from env_audit.collectors.base import CollectorUnavailableError
@@ -47,73 +44,6 @@ def _make_non_executable(path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Module-level helpers
-# ---------------------------------------------------------------------------
-
-
-class TestIsExecutableFile:
-    def test_regular_executable_returns_true(self, tmp_path: Path) -> None:
-        f = tmp_path / "tool"
-        _make_executable(f)
-        assert _is_executable_file(f) is True
-
-    def test_regular_non_executable_returns_false(self, tmp_path: Path) -> None:
-        f = tmp_path / "data.txt"
-        _make_non_executable(f)
-        assert _is_executable_file(f) is False
-
-    def test_directory_returns_false(self, tmp_path: Path) -> None:
-        d = tmp_path / "subdir"
-        d.mkdir()
-        assert _is_executable_file(d) is False
-
-    def test_oserror_returns_false(self, tmp_path: Path) -> None:
-        nonexistent = tmp_path / "ghost"
-        assert _is_executable_file(nonexistent) is False
-
-
-class TestIsSymlink:
-    def test_symlink_returns_true(self, tmp_path: Path) -> None:
-        target = tmp_path / "target"
-        _make_executable(target)
-        link = tmp_path / "link"
-        link.symlink_to(target)
-        assert _is_symlink(link) is True
-
-    def test_regular_file_returns_false(self, tmp_path: Path) -> None:
-        f = tmp_path / "file"
-        _make_executable(f)
-        assert _is_symlink(f) is False
-
-    def test_oserror_returns_false(self, tmp_path: Path) -> None:
-        # Patch Path.is_symlink to raise OSError
-        p = tmp_path / "x"
-        with patch.object(Path, "is_symlink", side_effect=OSError("no perm")):
-            assert _is_symlink(p) is False
-
-
-class TestSymlinkTarget:
-    def test_returns_resolved_target_for_symlink(self, tmp_path: Path) -> None:
-        target = tmp_path / "real_tool"
-        _make_executable(target)
-        link = tmp_path / "tool"
-        link.symlink_to(target)
-        result = _symlink_target(link)
-        assert result is not None
-        assert "real_tool" in result
-
-    def test_returns_none_for_regular_file(self, tmp_path: Path) -> None:
-        f = tmp_path / "file"
-        _make_executable(f)
-        assert _symlink_target(f) is None
-
-    def test_returns_none_on_oserror(self, tmp_path: Path) -> None:
-        p = tmp_path / "x"
-        with patch.object(Path, "is_symlink", side_effect=OSError("no perm")):
-            assert _symlink_target(p) is None
-
-
-# ---------------------------------------------------------------------------
 # ecosystem / DEFAULT_SCAN_DIRS
 # ---------------------------------------------------------------------------
 
@@ -121,6 +51,11 @@ class TestSymlinkTarget:
 class TestEcosystem:
     def test_returns_manual(self) -> None:
         assert ManualBinaryCollector().ecosystem == "manual"
+
+    def test_matches_shared_constant(self) -> None:
+        # The normalizer and orphan analyzer both branch on this constant;
+        # it must stay in step with what the collector actually emits.
+        assert ManualBinaryCollector().ecosystem == MANUAL_ECOSYSTEM
 
 
 class TestDefaultScanDirs:
@@ -148,7 +83,7 @@ class TestIsAvailable:
 
 
 # ---------------------------------------------------------------------------
-# collect() — high-level contract
+# collect() - high-level contract
 # ---------------------------------------------------------------------------
 
 
@@ -255,7 +190,7 @@ class TestCollect:
 
 
 # ---------------------------------------------------------------------------
-# _scan_directory — OSError handling
+# _scan_directory - OSError handling
 # ---------------------------------------------------------------------------
 
 

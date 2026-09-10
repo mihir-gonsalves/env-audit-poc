@@ -45,15 +45,15 @@ This collects packages from `apt`, `pip`, `npm`, and manual binary directories, 
 
 ### Understanding the Output
 
-**Package table** — one row per unique `(ecosystem, name)` pair after normalization. Intra-ecosystem duplicates are collapsed to the highest parsed version.
+**Package table** - one row per unique `(ecosystem, name)` pair after normalization. Intra-ecosystem duplicates are collapsed to the highest parsed version.
 
-**Analysis Findings table** — printed below the package table when any findings exist. Findings are sorted by severity (`warning` before `info`). Each row shows:
+**Analysis Findings table** - printed below the package table when any findings exist. Findings are sorted by severity (`warning` before `info`). Each row shows:
 
-- **Severity** — `warning` or `info`
-- **Kind** — the finding type (`cross_ecosystem_duplicate`, `path_shadow`, `orphaned_binary`)
-- **Message** — a human-readable explanation
+- **Severity** - `warning` or `info`
+- **Kind** - the finding type (`cross_ecosystem_duplicate`, `path_shadow`, `orphaned_binary`)
+- **Message** - a human-readable explanation
 
-**JSON output** — a top-level object with two keys:
+**JSON output** - a top-level object with two keys:
 
 ```json
 {
@@ -64,7 +64,7 @@ This collects packages from `apt`, `pip`, `npm`, and manual binary directories, 
 
 ### Verbosity Flags
 
-`-v` prints a one-line collector summary and total finding count to stderr — useful when piping stdout elsewhere.
+`-v` prints a one-line collector summary and total finding count to stderr - useful when piping stdout elsewhere.
 
 `-vv` adds per-collector package counts and per-analyzer finding counts to stderr.
 
@@ -203,8 +203,8 @@ Analyzers operate on the normalized package list and return typed `Finding` obje
 Renderers are responsible only for output formatting.
 
 Supported formats:
-- **Table** — Rich-powered terminal table (default)
-- **JSON** — structured object with `packages` and `findings` arrays
+- **Table** - Rich-powered terminal table (default)
+- **JSON** - structured object with `packages` and `findings` arrays
 
 ## Core Data Model
 
@@ -258,9 +258,18 @@ class PackageMetadata(BaseModel):
 - Non-semantic versions (`3.118ubuntu5`) are stored as `version_raw` with `version_parsed = None`
 
 ### Binary Ownership
-- Ownership detection uses heuristics for manual installs
+- pip console scripts are attributed from each package's `RECORD` manifest, so a tool
+  installed with `pip install --user` is reported as `pip` and not as a manual install,
+  even though it lives in `~/.local/bin`
+- Attribution matches on the exact absolute path. A symlink you placed yourself that
+  points at a pip script is still reported as manual, because it is a separate file
+- Tools managed by `pipx` or another per-tool virtualenv are reported as manual: the pip
+  being audited does not know about their environments
+- Python packages installed by apt carry `.egg-info` rather than `.dist-info` and expose
+  no manifest, so they report no binaries
+- Ownership for everything else in the scanned directories remains a heuristic, and
+  confidence levels reflect that uncertainty
 - Symlink chains may be ambiguous
-- Confidence levels reflect this uncertainty
 
 ## Safety and Trust Model
 
@@ -285,7 +294,7 @@ Coverage report:
 pytest --cov=src/env_audit --cov-report=term-missing
 ```
 
-Tests never depend on the developer's actual system — all collector tests use fixture files with captured command output.
+Tests never depend on the developer's actual system - all collector tests use fixture files with captured command output.
 
 ## Extending env-audit-poc
 

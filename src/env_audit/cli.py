@@ -112,6 +112,14 @@ def main(
     # ── Normalize ──────────────────────────────────────────────────────
     normalized = Normalizer().normalize(result.packages)
 
+    if verbose >= 2 and normalized.suppressed_manual_binaries:
+        owners = sorted(set(normalized.suppressed_manual_binaries.values()))
+        click.echo(
+            f"  [normalizer] {len(normalized.suppressed_manual_binaries)} manual "
+            f"binary record(s) suppressed (owned by: {', '.join(owners)})",
+            err=True,
+        )
+
     # ── Analyze ────────────────────────────────────────────────────────
     all_findings: list[Finding] = []
 

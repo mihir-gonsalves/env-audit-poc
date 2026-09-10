@@ -6,10 +6,10 @@ This document explains the architectural choices made in `env-audit-poc`, the tr
 
 Every significant design decision in this project traces back to one of four principles:
 
-1. **Correctness over completeness** — it is better to surface a partial picture with documented gaps than to silently guess.
-2. **Explainability over automation** — every finding should be traceable to a specific rule that a user can read and verify.
-3. **Read-only by default** — an auditing tool that modifies the system it is auditing cannot be trusted.
-4. **Independent failure** — no single component should be able to abort the entire audit.
+1. **Correctness over completeness** - it is better to surface a partial picture with documented gaps than to silently guess.
+2. **Explainability over automation** - every finding should be traceable to a specific rule that a user can read and verify.
+3. **Read-only by default** - an auditing tool that modifies the system it is auditing cannot be trusted.
+4. **Independent failure** - no single component should be able to abort the entire audit.
 
 ## Layered Pipeline Architecture
 
@@ -25,7 +25,7 @@ Each layer's output is the next layer's only input. No layer reaches backwards. 
 - **Substitutability.** Any renderer can be swapped in without touching collectors. Any new collector requires no changes downstream.
 - **Predictable data flow.** A bug in the analysis layer cannot corrupt collection output, a renderer bug cannot affect normalization.
 
-The CLI is the only component that sees the full pipeline. It is deliberately thin — it wires components together and handles formatting decisions, but contains no business logic of its own.
+The CLI is the only component that sees the full pipeline. It is deliberately thin - it wires components together and handles formatting decisions, but contains no business logic of its own.
 
 ## Data Model: Why Pydantic with Frozen Models
 
@@ -33,12 +33,12 @@ The CLI is the only component that sees the full pipeline. It is deliberately th
 
 **Why Pydantic over stdlib dataclasses?**
 - Field validators run automatically on construction, catching malformed data at the boundary (e.g., relative paths in `BinaryRecord.path`, blank `source` strings)
-- `model_dump(mode='json')` serializes the full object graph — including enums, nested models, and `None` fields — without any custom serialization code
+- `model_dump(mode='json')` serializes the full object graph - including enums, nested models, and `None` fields - without any custom serialization code
 - Frozen models prevent accidental mutation anywhere in the pipeline
 
 **The cost:** Pydantic adds a dependency and makes construction slightly more verbose. This is acceptable for a tool where data correctness is the primary goal.
 
-**Why frozen at all?** Once a `PackageRecord` is created by a collector, no downstream layer should modify it. Freezing enforces this at the type level rather than relying on convention. The normalizer does not mutate records — it selects, sorts, and groups them.
+**Why frozen at all?** Once a `PackageRecord` is created by a collector, no downstream layer should modify it. Freezing enforces this at the type level rather than relying on convention. The normalizer does not mutate records - it selects, sorts, and groups them.
 
 ## Version Handling: Dual Storage
 
@@ -67,7 +67,7 @@ class PackageMetadata(BaseModel):
 
 **Typed core fields** (`install_date`, `install_reason`, `size_bytes`) are the fields that analyzers and future features can depend on unconditionally, with no ecosystem-specific knowledge.
 
-**`extensions`** handles everything else — architecture (`apt:architecture`), editable installs (`pip:editable`), tap origin (`brew:tap`) — using a mandatory `ecosystem:key` namespace enforced by a field validator. The colon requirement prevents collisions between ecosystems without requiring a formal schema per ecosystem.
+**`extensions`** handles everything else - architecture (`apt:architecture`), editable installs (`pip:editable`), tap origin (`brew:tap`) - using a mandatory `ecosystem:key` namespace enforced by a field validator. The colon requirement prevents collisions between ecosystems without requiring a formal schema per ecosystem.
 
 **The tradeoff:** `extensions` values are untyped `Any`. A consumer must know the key to use the value. This is acceptable because extensions are always ecosystem-specific and consumers that care about them (e.g., a future apt-specific analyzer) already know which ecosystem they are operating on.
 
@@ -84,7 +84,7 @@ def _parse(self, output: str) -> list[PackageRecord]:
     ...   # pure function, tested directly with fixture strings
 ```
 
-**Why this split?** Mocking subprocess calls tests the wrong thing — it verifies that the code calls subprocess correctly, not that it parses real output correctly. Fixture files contain actual output from real systems. Tests call `_parse()` directly with those strings. This catches parsing bugs that subprocess mocking would miss.
+**Why this split?** Mocking subprocess calls tests the wrong thing - it verifies that the code calls subprocess correctly, not that it parses real output correctly. Fixture files contain actual output from real systems. Tests call `_parse()` directly with those strings. This catches parsing bugs that subprocess mocking would miss.
 
 **`_parse()` never raises.** Malformed lines are skipped, invalid JSON returns an empty list. This upholds the collector error contract: errors are either `CollectorError` subclasses (for systemic failures) or silent skips (for individual malformed records).
 
@@ -121,11 +121,58 @@ for collector in self._collectors:
 
 Both the `Normalizer` and `DuplicateAnalyzer` detect packages with the same name in multiple ecosystems. They are not redundant.
 
-The **normalizer** produces `NormalizerResult.cross_ecosystem_duplicates` as a structural metadata record — a `dict[str, list[str]]` used internally to understand the shape of the package set. The normalizer does not decide whether a cross-ecosystem duplicate is a problem, it just records the fact.
+The **normalizer** produces `NormalizerResult.cross_ecosystem_duplicates` as a structural metadata record - a `dict[str, list[str]]` used internally to understand the shape of the package set. The normalizer does not decide whether a cross-ecosystem duplicate is a problem, it just records the fact.
 
-The **`DuplicateAnalyzer`** produces `CrossEcosystemDuplicate` findings — typed, severity-tagged, serializable objects designed for human and machine consumption. It is the analysis layer's job to decide that a cross-ecosystem duplicate is a `"warning"` and to produce a readable `message`.
+The **`DuplicateAnalyzer`** produces `CrossEcosystemDuplicate` findings - typed, severity-tagged, serializable objects designed for human and machine consumption. It is the analysis layer's job to decide that a cross-ecosystem duplicate is a `"warning"` and to produce a readable `message`.
 
 The separation means that future analyzers that need cross-ecosystem information can read `NormalizerResult.cross_ecosystem_duplicates` directly, while the `DuplicateAnalyzer` can be updated (e.g., to exclude known intentional dual installs) without touching the normalizer.
+
+## Binary Ownership Resolution
+
+`pip install --user` writes console scripts into `~/.local/bin`, which is also one of the
+directories `ManualBinaryCollector` scans. Without ownership information the pipeline reports
+`pytest` as both a pip package and a manual install, and flags `dmypy` and `mypyc` as orphaned
+binaries because their names differ from the owning package name (`mypy`). Both are false
+positives, and on a real developer machine they dominated the output: 51 of 51 orphan findings
+and 7 of 7 cross-ecosystem duplicates.
+
+**Where the truth comes from.** Every wheel-installed package has a `RECORD` file (PEP 376) in
+its `.dist-info` directory listing every path it installed, with console scripts appearing as
+`../../../bin/<name>` relative to site-packages. `PipCollector` reads this and attaches a
+`BinaryRecord` per script at `Confidence.HIGH` - this is manifest data, not a guess.
+
+**Why `RECORD` and not `pip show -f`?** `pip show -f` reports the same information, but measured
+across 219 packages it took roughly 10 seconds and produced 2.6 MB of text to re-parse. Reading
+`RECORD` costs one `iterdir()` per site-packages directory plus a small CSV read per package.
+The `--verbose` flag that supplies the per-package `location` is free: both forms of `pip list`
+run in about 0.55 s.
+
+**Why the normalizer resolves the overlap, not the collectors.** The suppression rule lives in
+`Normalizer._suppress_claimed_manual()`: a `manual` record is dropped when every one of its
+binaries is claimed, at the same absolute path, by a HIGH-confidence binary from another
+ecosystem. Three placements were possible:
+
+- *In the collectors* - `ManualBinaryCollector` would need to know what pip found, which forces
+  one collector to run after another and breaks the independent-failure property.
+- *In the analyzers* - all three analyzers would need the same rule, in three copies. Worse,
+  once pip records carry binaries, `PathShadowAnalyzer` would report the same path as shadowing
+  itself.
+- *In the normalizer* - one rule, applied once, fixing all three analyzers. Deduplication and
+  precedence are already its job.
+
+**Why only HIGH confidence counts.** A MEDIUM or LOW attribution is itself a heuristic. One
+heuristic silently deleting another would make findings depend on collector ordering.
+
+**The accepted limitation.** Matching is on the normalized absolute path, with no `realpath` and
+no filesystem access, which keeps the normalizer a pure function of its input. A symlink that
+points at a pip script but lives at a different path is not suppressed. That is the right
+outcome anyway: it is a real, separately-placed file that shadowing analysis should still see.
+Tools managed by `pipx` stay `manual` for the same reason - the audited pip does not list their
+environments.
+
+**Explainability.** Suppression is recorded in `NormalizerResult.suppressed_manual_binaries`
+(path to owning ecosystem) and surfaced at `-vv`, so a dropped record is always accounted for
+rather than silently vanishing.
 
 ## PathShadowAnalyzer: Audit-Time Only
 
@@ -137,7 +184,7 @@ The separation means that future analyzers that need cross-ecosystem information
 
 This is an explicit scope decision. PATH analysis that attempts to cover all shell configuration variants would be complex, error-prone, and fragile across shell flavors. Audit-time PATH analysis is simpler, deterministic, and documented honestly.
 
-The `path=` constructor parameter is not a compromise — it is the correct API. It decouples the analyzer from the environment for testing without any mocking infrastructure.
+The `path=` constructor parameter is not a compromise - it is the correct API. It decouples the analyzer from the environment for testing without any mocking infrastructure.
 
 ## Findings: Frozen Dataclasses with `to_dict()`
 
@@ -155,11 +202,11 @@ class CrossEcosystemDuplicate(Finding):
         return d
 ```
 
-**Why dataclasses and not Pydantic?** `Finding` subclasses are internal analysis products — they are never parsed from external input and need no field validation. Stdlib dataclasses are sufficient and keep the analyzer layer free of Pydantic imports.
+**Why dataclasses and not Pydantic?** `Finding` subclasses are internal analysis products - they are never parsed from external input and need no field validation. Stdlib dataclasses are sufficient and keep the analyzer layer free of Pydantic imports.
 
 **Why `frozen=True`?** Findings are produced by an analyzer, returned in a list, and consumed by a renderer. No layer should modify them. Freezing enforces this.
 
-**Why tuples for multi-value fields (`ecosystems`, `shadowed_paths`)?** Tuples signal that these sequences are ordered and immutable. `dataclasses.asdict()` preserves tuples (it uses `type(obj)(...)` when recursing, so `tuple` stays `tuple`). This is intentional — JSON serialization converts them to arrays at the renderer layer, where that conversion belongs.
+**Why tuples for multi-value fields (`ecosystems`, `shadowed_paths`)?** Tuples signal that these sequences are ordered and immutable. `dataclasses.asdict()` preserves tuples (it uses `type(obj)(...)` when recursing, so `tuple` stays `tuple`). This is intentional - JSON serialization converts them to arrays at the renderer layer, where that conversion belongs.
 
 **Why a `kind` field added in `to_dict()` rather than a class attribute?** The `kind` string is a serialization concern, not a modeling concern. Adding it in `to_dict()` keeps the dataclass fields clean and avoids the need for a `ClassVar` annotation.
 
@@ -168,9 +215,9 @@ class CrossEcosystemDuplicate(Finding):
 The `Renderer` ABC has a single method: `render(packages: list[PackageRecord]) -> str`. It does not accept findings.
 
 **Why not extend the ABC to include findings?**
-Renderers are independently testable against package lists with no findings infrastructure. Extending the ABC would require every renderer test to construct findings fixtures and every renderer implementation to handle both concerns. The package table and the findings table are visually and structurally distinct — keeping them separate in the code reflects this.
+Renderers are independently testable against package lists with no findings infrastructure. Extending the ABC would require every renderer test to construct findings fixtures and every renderer implementation to handle both concerns. The package table and the findings table are visually and structurally distinct - keeping them separate in the code reflects this.
 
-**Where are findings rendered?** In the CLI. For `--format table`, the CLI calls `TableRenderer().render(packages)` then `_render_findings_table(findings)` as a second Rich table. For `--format json`, the CLI builds `{"packages": ..., "findings": ...}` directly. The CLI is the right place for these assembly decisions — it is the only component with visibility into both the output format and the findings list simultaneously.
+**Where are findings rendered?** In the CLI. For `--format table`, the CLI calls `TableRenderer().render(packages)` then `_render_findings_table(findings)` as a second Rich table. For `--format json`, the CLI builds `{"packages": ..., "findings": ...}` directly. The CLI is the right place for these assembly decisions - it is the only component with visibility into both the output format and the findings list simultaneously.
 
 ## JSON Output Envelope
 
@@ -196,7 +243,7 @@ Rather than the original flat array `[...]`.
 **Why registries?**
 - The `--collectors` flag can validate user input against `COLLECTOR_REGISTRY.keys()` with a single membership test
 - Tests patch `COLLECTOR_REGISTRY` and `ANALYZER_REGISTRY` to inject mocks without touching any real collector or analyzer code
-- Adding a new collector or analyzer requires editing exactly one dict — there is no list to keep in sync with a `click.Choice` elsewhere
+- Adding a new collector or analyzer requires editing exactly one dict - there is no list to keep in sync with a `click.Choice` elsewhere
 
 **Why not auto-discovery via entry points?** Auto-discovery is powerful but adds complexity: the `importlib.metadata` API, `pyproject.toml` entry point declarations, and potential ordering ambiguity. The current explicit registry is simpler, more debuggable, and appropriate for the current scope. Auto-discovery is a natural Phase 6+ enhancement.
 
@@ -208,7 +255,7 @@ Collector tests never call real system commands. Instead:
 
 1. Real command output is captured once from a live system and stored in `tests/fixtures/`
 2. `_parse()` is a pure method that accepts a string and returns a list
-3. Tests call `_parse(fixture_file.read_text())` directly — no mocking required for parsing tests
+3. Tests call `_parse(fixture_file.read_text())` directly - no mocking required for parsing tests
 4. The subprocess layer is mocked only in `collect()` tests that verify error handling behavior
 
 This approach catches real-world parsing bugs (format changes, locale variations, edge cases) that subprocess mocking would miss entirely.
@@ -219,4 +266,4 @@ Tests never read `os.environ["PATH"]`, check for installed binaries, or scan rea
 
 ### 100% Coverage as a Policy
 
-100% coverage is maintained not as a vanity metric but as a correctness signal. Every line being covered means every branch has been explicitly reasoned about and tested. Untested branches in a read-only auditing tool are potential silent failures — cases where the tool produces no output rather than an accurate (partial) result.
+100% coverage is maintained not as a vanity metric but as a correctness signal. Every line being covered means every branch has been explicitly reasoned about and tested. Untested branches in a read-only auditing tool are potential silent failures - cases where the tool produces no output rather than an accurate (partial) result.

@@ -138,8 +138,16 @@ class BrewCollector(Collector):
 
 **Rules for `_parse()`:**
 - Must be a pure function: same input always produces same output
-- Must never raise — malformed records are silently skipped
+- Must never raise - malformed records are silently skipped
 - Must never call subprocesses or read files
+
+**If your collector needs the filesystem**, do it in a separate method rather than in
+`_parse()`, so parsing stays pure and fixture-testable. That method must tolerate every
+`OSError` and degrade to an empty result rather than raising, and it is tested with a
+`tmp_path` layout instead of a fixture file. Two collectors work this way:
+`ManualBinaryCollector` scans directories for executables, and `PipCollector._attach_binaries()`
+reads each package's `RECORD` manifest after `_parse()` has returned. Shared path helpers
+live in `collectors/fsutil.py`.
 
 **Rules for `collect()`:**
 - Must raise `CollectorUnavailableError` when the tool is not installed
@@ -206,7 +214,7 @@ class OversizedPackageFinding(Finding):
 - Must be `frozen=True`
 - Must override `to_dict()` and add a `"kind"` key
 - The `kind` value must be unique across all finders (use snake_case)
-- Multi-value fields should use `tuple[str, ...]`, not `list` — tuples are immutable and survive `dataclasses.asdict()` as tuples
+- Multi-value fields should use `tuple[str, ...]`, not `list` - tuples are immutable and survive `dataclasses.asdict()` as tuples
 
 ### 2. Implement the analyzer
 
@@ -231,7 +239,7 @@ class SizeAnalyzer(Analyzer):
 
 **Rules for `analyze()`:**
 - Must accept an empty list without raising
-- Must never raise — return an empty list instead
+- Must never raise - return an empty list instead
 - Must return findings in a deterministic order (sort explicitly)
 - Must never modify any `PackageRecord`
 
@@ -291,11 +299,11 @@ Create `tests/test_renderers/test_markdown.py`. Required coverage: empty list, t
 
 This project does not use a formatter (Black, Ruff) by default, but follows these conventions consistently:
 
-- **Type annotations everywhere** — all function signatures are fully annotated
+- **Type annotations everywhere** - all function signatures are fully annotated
 - **`from __future__ import annotations`** at the top of files that use `X | Y` union syntax
 - **`__all__`** declared in every module to make the public API explicit
 - **Docstrings** on every public class and method, use the numpy/Google style (Parameters/Returns sections for non-trivial functions)
-- **No bare `except:`** — always catch a specific exception type
+- **No bare `except:`** - always catch a specific exception type
 - **No `# type: ignore`** unless accompanied by a comment explaining why it is safe
 
 ## Commit Guidelines
@@ -308,10 +316,10 @@ This project does not use a formatter (Black, Ruff) by default, but follows thes
 
 This tool is deliberately scoped. Please do not open PRs that:
 
-- **Modify the system** — no package removal, no file writes outside the project directory
-- **Add network calls** — the tool is designed to run without internet access
-- **Add shell configuration parsing** — PATH shadowing is audit-time only, this is documented
-- **Add auto-discovery of collectors** — explicit registry is intentional, auto-discovery is a post-v1 concern
-- **Lower test coverage below 100%** — new code must be fully covered
+- **Modify the system** - no package removal, no file writes outside the project directory
+- **Add network calls** - the tool is designed to run without internet access
+- **Add shell configuration parsing** - PATH shadowing is audit-time only, this is documented
+- **Add auto-discovery of collectors** - explicit registry is intentional, auto-discovery is a post-v1 concern
+- **Lower test coverage below 100%** - new code must be fully covered
 
 If you want to discuss a larger architectural change, open an issue first.

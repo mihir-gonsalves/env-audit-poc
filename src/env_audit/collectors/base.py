@@ -66,7 +66,7 @@ class Collector(ABC):
     Abstract base class for all package collectors.
 
     Each collector is responsible for one ecosystem (apt, pip, npm, etc.).
-    Collectors are strictly read-only — they must never modify system state.
+    Collectors are strictly read-only - they must never modify system state.
 
     Error contract
     --------------
@@ -74,7 +74,7 @@ class Collector(ABC):
       ``collect()`` if the required tools are missing.
     - Raise ``CollectorTimeoutError`` if a subprocess exceeds its timeout.
     - Raise ``CollectorParseError`` if command output cannot be parsed.
-    - Never let raw ``subprocess`` or ``OSError`` exceptions escape — wrap
+    - Never let raw ``subprocess`` or ``OSError`` exceptions escape - wrap
       them in the appropriate ``CollectorError`` subclass.
 
     The orchestrator catches ``CollectorError`` and records it per-collector,
@@ -100,7 +100,7 @@ class Collector(ABC):
         Return ``True`` if this collector can run on the current system.
 
         Should be fast and side-effect-free (e.g. check with
-        ``shutil.which``).  Must not raise — return ``False`` instead.
+        ``shutil.which``).  Must not raise - return ``False`` instead.
         """
 
     @abstractmethod

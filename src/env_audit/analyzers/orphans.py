@@ -4,7 +4,7 @@ Orphaned binary analyzer for env-audit-poc.
 
 An "orphaned" binary is one found in the ``manual`` ecosystem for which
 no other package manager (apt, pip, npm, …) has a record claiming that
-name — either as a package name or as an explicit binary record.
+name - either as a package name or as an explicit binary record.
 
 This is a heuristic: a binary named ``git`` in ``~/bin`` would not be
 flagged as an orphan if ``git`` is also present as an apt package, even
@@ -17,6 +17,7 @@ from __future__ import annotations
 import dataclasses
 from typing import Any
 
+from env_audit.collectors.manual import MANUAL_ECOSYSTEM
 from env_audit.models import PackageRecord
 
 from .base import Analyzer, Finding
@@ -62,7 +63,7 @@ class OrphanedBinaryAnalyzer(Analyzer):
         # Step 1: collect all names claimed by non-manual ecosystems.
         managed_names: set[str] = set()
         for pkg in packages:
-            if pkg.ecosystem == "manual":
+            if pkg.ecosystem == MANUAL_ECOSYSTEM:
                 continue
             managed_names.add(pkg.name)
             for binary in pkg.binaries:
@@ -71,7 +72,7 @@ class OrphanedBinaryAnalyzer(Analyzer):
         # Step 2 & 3: check each manual binary against managed names.
         orphan_findings: list[OrphanedBinaryFinding] = []
         for pkg in packages:
-            if pkg.ecosystem != "manual":
+            if pkg.ecosystem != MANUAL_ECOSYSTEM:
                 continue
             for binary in pkg.binaries:
                 if binary.name not in managed_names:

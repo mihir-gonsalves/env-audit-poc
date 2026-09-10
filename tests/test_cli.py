@@ -257,7 +257,7 @@ class TestFormatFlag:
 class TestNoAnalyzeFlag:
     def test_no_analyze_skips_analysis_in_json(self) -> None:
         """With --no-analyze the findings list is absent (key not present is
-        impossible — we still emit the key but it must be empty)."""
+        impossible - we still emit the key but it must be empty)."""
         registry = {"mock": _make_collector_class(packages=[_pkg()])}
         with patch("env_audit.cli.COLLECTOR_REGISTRY", registry):
             result = _runner().invoke(main, ["--format", "json", "--no-analyze"])
@@ -489,3 +489,69 @@ class TestVerboseFlag:
         with patch("env_audit.cli.COLLECTOR_REGISTRY", registry):
             result = _runner().invoke(main, ["-v", "--no-analyze"])
         assert "finding(s)" not in result.output
+
+# ---------------------------------------------------------------------------
+# Suppression reporting at -vv
+# ---------------------------------------------------------------------------
+
+
+def _owned_pair(path: str = "/home/u/.local/bin/pytest") -> list[PackageRecord]:
+    """A pip package that owns *path*, plus the manual scan that found it."""
+    from env_audit.models import BinaryRecord, Confidence
+
+    def _bin(confidence: Confidence) -> BinaryRecord:
+        return BinaryRecord(
+            name="pytest",
+            path=path,
+            confidence=confidence,
+            is_symlink=False,
+            symlink_target=None,
+        )
+
+    return [
+        PackageRecord(
+            name="pytest",
+            ecosystem="pip",
+            source="pypi",
+            binaries=[_bin(Confidence.HIGH)],
+        ),
+        PackageRecord(
+            name="pytest",
+            ecosystem="manual",
+            source="/home/u/.local/bin",
+            binaries=[_bin(Confidence.MEDIUM)],
+        ),
+    ]
+
+
+class TestSuppressionReporting:
+    def test_verbose_2_reports_suppressed_manual_records(self) -> None:
+        registry = {"mock": _make_collector_class(packages=_owned_pair())}
+        with patch("env_audit.cli.COLLECTOR_REGISTRY", registry), \
+             patch("env_audit.cli.ANALYZER_REGISTRY", _empty_analyzers()):
+            result = _runner().invoke(main, ["-vv"])
+        assert result.exit_code == 0
+        assert "suppressed" in result.output
+        assert "owned by: pip" in result.output
+
+    def test_verbose_2_silent_when_nothing_suppressed(self) -> None:
+        registry = {"mock": _make_collector_class(packages=[_pkg()])}
+        with patch("env_audit.cli.COLLECTOR_REGISTRY", registry), \
+             patch("env_audit.cli.ANALYZER_REGISTRY", _empty_analyzers()):
+            result = _runner().invoke(main, ["-vv"])
+        assert "suppressed" not in result.output
+
+    def test_verbose_1_does_not_report_suppression(self) -> None:
+        registry = {"mock": _make_collector_class(packages=_owned_pair())}
+        with patch("env_audit.cli.COLLECTOR_REGISTRY", registry), \
+             patch("env_audit.cli.ANALYZER_REGISTRY", _empty_analyzers()):
+            result = _runner().invoke(main, ["-v"])
+        assert "suppressed" not in result.output
+
+    def test_suppressed_record_absent_from_json_output(self) -> None:
+        registry = {"mock": _make_collector_class(packages=_owned_pair())}
+        with patch("env_audit.cli.COLLECTOR_REGISTRY", registry), \
+             patch("env_audit.cli.ANALYZER_REGISTRY", _empty_analyzers()):
+            result = _runner().invoke(main, ["--format", "json"])
+        data = _json.loads(result.output)
+        assert [p["ecosystem"] for p in data["packages"]] == ["pip"]

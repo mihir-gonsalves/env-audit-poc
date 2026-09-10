@@ -12,7 +12,7 @@ Strategy
 
 import pytest
 
-from env_audit.models import PackageRecord, SemVer
+from env_audit.models import BinaryRecord, Confidence, PackageRecord, SemVer
 from env_audit.normalizer import NormalizerResult, Normalizer
 
 
@@ -73,7 +73,7 @@ class TestNormalizerResult:
 
 
 # ---------------------------------------------------------------------------
-# Normalizer.normalize() — empty input
+# Normalizer.normalize() - empty input
 # ---------------------------------------------------------------------------
 
 
@@ -247,7 +247,7 @@ class TestCrossEcosystemDuplicates:
 
 
 # ---------------------------------------------------------------------------
-# _pick_best() — direct unit tests
+# _pick_best() - direct unit tests
 # ---------------------------------------------------------------------------
 
 
@@ -292,7 +292,7 @@ class TestCombinedScenarios:
             _versioned("vim", 9, ecosystem="apt"),
             _versioned("git", 2, ecosystem="apt"),
             _versioned("python3", 3, 11, ecosystem="apt"),
-            # pip — python3 also appears here (cross-dupe)
+            # pip - python3 also appears here (cross-dupe)
             _versioned("python3", 3, 12, ecosystem="pip"),
             _versioned("click", 8, ecosystem="pip"),
             # pip intra-dupe: click appears twice, higher version wins
@@ -319,3 +319,199 @@ class TestCombinedScenarios:
         # Output is sorted
         keys = [(p.ecosystem, p.name) for p in result.packages]
         assert keys == sorted(keys)
+
+# ---------------------------------------------------------------------------
+# Claimed-binary suppression (Step 0)
+# ---------------------------------------------------------------------------
+
+
+def _binary(
+    name: str,
+    path: str,
+    confidence: Confidence = Confidence.HIGH,
+) -> BinaryRecord:
+    return BinaryRecord(
+        name=name, path=path, confidence=confidence, is_symlink=False, symlink_target=None
+    )
+
+
+def _with_binaries(
+    name: str,
+    ecosystem: str,
+    binaries: list[BinaryRecord],
+) -> PackageRecord:
+    return PackageRecord(
+        name=name, ecosystem=ecosystem, source="test-src", binaries=binaries
+    )
+
+
+class TestClaimedBinarySuppression:
+    """
+    ``pip install --user`` writes console scripts into ``~/.local/bin``,
+    which ``ManualBinaryCollector`` also scans.  The manual record must give
+    way to the ecosystem whose manifest actually claims the path.
+    """
+
+    def test_manual_record_dropped_when_binary_claimed(self) -> None:
+        path = "/home/u/.local/bin/pytest"
+        pip = _with_binaries("pytest", "pip", [_binary("pytest", path)])
+        manual = _with_binaries("pytest", "manual", [_binary("pytest", path)])
+
+        result = Normalizer().normalize([pip, manual])
+
+        assert [(p.ecosystem, p.name) for p in result.packages] == [("pip", "pytest")]
+
+    def test_suppressed_path_recorded_with_owning_ecosystem(self) -> None:
+        path = "/home/u/.local/bin/pytest"
+        pip = _with_binaries("pytest", "pip", [_binary("pytest", path)])
+        manual = _with_binaries("pytest", "manual", [_binary("pytest", path)])
+
+        result = Normalizer().normalize([pip, manual])
+
+        assert result.suppressed_manual_binaries == {path: "pip"}
+
+    def test_default_suppressed_mapping_is_empty(self) -> None:
+        assert NormalizerResult().suppressed_manual_binaries == {}
+
+    def test_nothing_suppressed_leaves_mapping_empty(self) -> None:
+        result = Normalizer().normalize([_pkg("vim", ecosystem="apt")])
+        assert result.suppressed_manual_binaries == {}
+
+    def test_medium_confidence_claim_does_not_suppress(self) -> None:
+        # One heuristic must not silently delete another; only manifest-backed
+        # (HIGH) attribution is authoritative.
+        path = "/home/u/.local/bin/tool"
+        other = _with_binaries(
+            "tool", "pip", [_binary("tool", path, confidence=Confidence.MEDIUM)]
+        )
+        manual = _with_binaries("tool", "manual", [_binary("tool", path)])
+
+        result = Normalizer().normalize([other, manual])
+
+        assert any(p.ecosystem == "manual" for p in result.packages)
+        assert result.suppressed_manual_binaries == {}
+
+    def test_low_confidence_claim_does_not_suppress(self) -> None:
+        path = "/home/u/.local/bin/tool"
+        other = _with_binaries(
+            "tool", "pip", [_binary("tool", path, confidence=Confidence.LOW)]
+        )
+        manual = _with_binaries("tool", "manual", [_binary("tool", path)])
+
+        result = Normalizer().normalize([other, manual])
+
+        assert any(p.ecosystem == "manual" for p in result.packages)
+
+    def test_manual_record_without_binaries_is_kept(self) -> None:
+        manual = _pkg("mystery", ecosystem="manual")
+        result = Normalizer().normalize([manual])
+        assert len(result.packages) == 1
+
+    def test_partially_claimed_manual_record_is_kept(self) -> None:
+        # A record is only suppressed when every binary it owns is claimed.
+        claimed = "/home/u/.local/bin/known"
+        unclaimed = "/home/u/.local/bin/unknown"
+        pip = _with_binaries("known", "pip", [_binary("known", claimed)])
+        manual = _with_binaries(
+            "bundle", "manual", [_binary("known", claimed), _binary("unknown", unclaimed)]
+        )
+
+        result = Normalizer().normalize([pip, manual])
+
+        assert any(p.ecosystem == "manual" for p in result.packages)
+        assert result.suppressed_manual_binaries == {}
+
+    def test_unclaimed_manual_binary_is_kept(self) -> None:
+        manual = _with_binaries(
+            "hand-rolled", "manual", [_binary("hand-rolled", "/home/u/bin/hand-rolled")]
+        )
+        result = Normalizer().normalize([manual])
+        assert len(result.packages) == 1
+
+    def test_paths_are_normalized_before_comparison(self) -> None:
+        pip = _with_binaries("pytest", "pip", [_binary("pytest", "/home/u/.local/bin/pytest")])
+        manual = _with_binaries(
+            "pytest", "manual", [_binary("pytest", "/home/u/.local/lib/../bin/pytest")]
+        )
+
+        result = Normalizer().normalize([pip, manual])
+
+        assert [p.ecosystem for p in result.packages] == ["pip"]
+
+    def test_different_path_same_name_not_suppressed(self) -> None:
+        # A hand-placed file elsewhere on disk is a real, separate binary.
+        pip = _with_binaries("pytest", "pip", [_binary("pytest", "/home/u/.local/bin/pytest")])
+        manual = _with_binaries("pytest", "manual", [_binary("pytest", "/usr/local/bin/pytest")])
+
+        result = Normalizer().normalize([pip, manual])
+
+        assert {p.ecosystem for p in result.packages} == {"pip", "manual"}
+
+    def test_non_manual_records_are_never_suppressed(self) -> None:
+        path = "/usr/local/bin/tool"
+        pip = _with_binaries("tool", "pip", [_binary("tool", path)])
+        npm = _with_binaries("tool", "npm", [_binary("tool", path)])
+
+        result = Normalizer().normalize([pip, npm])
+
+        assert {p.ecosystem for p in result.packages} == {"pip", "npm"}
+
+    def test_manual_claim_does_not_suppress_another_manual_record(self) -> None:
+        path = "/home/u/bin/tool"
+        a = _with_binaries("tool", "manual", [_binary("tool", path)])
+        result = Normalizer().normalize([a])
+        assert len(result.packages) == 1
+
+    def test_first_claiming_ecosystem_wins_in_the_report(self) -> None:
+        path = "/home/u/.local/bin/tool"
+        pip = _with_binaries("tool", "pip", [_binary("tool", path)])
+        npm = _with_binaries("tool", "npm", [_binary("tool", path)])
+        manual = _with_binaries("tool", "manual", [_binary("tool", path)])
+
+        result = Normalizer().normalize([pip, npm, manual])
+
+        assert result.suppressed_manual_binaries == {path: "pip"}
+
+    def test_multiple_suppressed_binaries_all_recorded(self) -> None:
+        mypy_path = "/home/u/.local/bin/mypy"
+        dmypy_path = "/home/u/.local/bin/dmypy"
+        pip = _with_binaries(
+            "mypy", "pip", [_binary("mypy", mypy_path), _binary("dmypy", dmypy_path)]
+        )
+        manual_mypy = _with_binaries("mypy", "manual", [_binary("mypy", mypy_path)])
+        manual_dmypy = _with_binaries("dmypy", "manual", [_binary("dmypy", dmypy_path)])
+
+        result = Normalizer().normalize([pip, manual_mypy, manual_dmypy])
+
+        assert result.suppressed_manual_binaries == {mypy_path: "pip", dmypy_path: "pip"}
+        assert [p.name for p in result.packages] == ["mypy"]
+
+    def test_cross_ecosystem_duplicate_no_longer_reported(self) -> None:
+        # The original bug, end to end: pytest reported as manual + pip.
+        path = "/home/u/.local/bin/pytest"
+        pip = _with_binaries("pytest", "pip", [_binary("pytest", path)])
+        manual = _with_binaries("pytest", "manual", [_binary("pytest", path)])
+
+        result = Normalizer().normalize([pip, manual])
+
+        assert result.cross_ecosystem_duplicates == {}
+
+    def test_genuine_cross_ecosystem_duplicate_still_reported(self) -> None:
+        # Suppression must not mask real dual installs.
+        apt = _pkg("python3", ecosystem="apt")
+        pip = _pkg("python3", ecosystem="pip")
+
+        result = Normalizer().normalize([apt, pip])
+
+        assert set(result.cross_ecosystem_duplicates["python3"]) == {"apt", "pip"}
+
+    def test_suppression_survives_intra_ecosystem_dedup(self) -> None:
+        path = "/home/u/.local/bin/pytest"
+        pip = _with_binaries("pytest", "pip", [_binary("pytest", path)])
+        manual_a = _with_binaries("pytest", "manual", [_binary("pytest", path)])
+        manual_b = _with_binaries("pytest", "manual", [_binary("pytest", path)])
+
+        result = Normalizer().normalize([pip, manual_a, manual_b])
+
+        assert [p.ecosystem for p in result.packages] == ["pip"]
+        assert ("manual", "pytest") not in result.intra_ecosystem_duplicates

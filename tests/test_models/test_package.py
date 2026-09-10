@@ -102,7 +102,7 @@ class TestSemVer:
         """Test __eq__ NotImplemented guard for non-SemVer objects.
         
         Closes the `return NotImplemented` branch in __eq__. Calling the
-        dunder directly is the only reliable way to exercise this line —
+        dunder directly is the only reliable way to exercise this line -
         Python's == operator may short-circuit before reaching it.
         """
         v = SemVer(major=1, minor=0, patch=0)

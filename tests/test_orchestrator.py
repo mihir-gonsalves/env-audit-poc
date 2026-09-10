@@ -10,7 +10,7 @@ Strategy
   - Empty collector list (no loop body executed).
   - Single successful collector (``packages.extend`` branch).
   - Single failing collector (``CollectorError`` catch branch).
-  - Mix of both (proves independence — one failure does not stop others).
+  - Mix of both (proves independence - one failure does not stop others).
 * ``AuditResult`` defaults are verified directly.
 """
 

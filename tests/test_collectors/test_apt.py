@@ -4,7 +4,7 @@
 
 Design principles
 -----------------
-* All subprocess interaction is mocked — tests never touch the live system.
+* All subprocess interaction is mocked - tests never touch the live system.
 * The fixture file (tests/fixtures/apt/ubuntu-22.04.txt) represents real
   ``apt list --installed`` output and exercises the full parsing path.
 * Each conditional branch in collect(), _parse(), and _try_parse_semver()
@@ -67,7 +67,7 @@ class TestIsAvailable:
 
 
 # ---------------------------------------------------------------------------
-# collect() — subprocess layer
+# collect() - subprocess layer
 # ---------------------------------------------------------------------------
 
 
@@ -142,7 +142,7 @@ class TestCollect:
 
 
 # ---------------------------------------------------------------------------
-# _parse() — output parsing
+# _parse() - output parsing
 # ---------------------------------------------------------------------------
 
 
@@ -162,7 +162,7 @@ class TestParse:
         assert self._parse("\n\n   \n") == []
 
     def test_malformed_line_is_skipped(self) -> None:
-        # No slash — does not match _LINE_RE
+        # No slash - does not match _LINE_RE
         assert self._parse("this is not valid apt output") == []
 
     def test_explicit_install_sets_reason(self) -> None:
@@ -225,30 +225,30 @@ class TestParse:
 
         by_name = {r.name: r for r in records}
 
-        # python3.11 — explicit, parseable version, tilde prerelease
+        # python3.11 - explicit, parseable version, tilde prerelease
         p311 = by_name["python3.11"]
         assert p311.ecosystem == "apt"
         assert p311.source == "jammy-updates"
         assert p311.metadata.install_reason == InstallReason.EXPLICIT
         assert p311.version_parsed == SemVer(major=3, minor=11, patch=6, prerelease="1~22.04")
 
-        # apt — automatic
+        # apt - automatic
         apt_pkg = by_name["apt"]
         assert apt_pkg.metadata.install_reason == InstallReason.DEPENDENCY
         assert apt_pkg.version_parsed == SemVer(major=2, minor=4, patch=12)
 
-        # vim — epoch version
+        # vim - epoch version
         vim = by_name["vim"]
         assert vim.version_raw == "2:8.2.3995-1ubuntu2.17"
         assert vim.version_parsed == SemVer(
             major=8, minor=2, patch=3995, prerelease="1ubuntu2.17"
         )
 
-        # adduser — unparseable version
+        # adduser - unparseable version
         adduser = by_name["adduser"]
         assert adduser.version_parsed is None
 
-        # zlib1g — epoch + dfsg (unparseable, dot after patch)
+        # zlib1g - epoch + dfsg (unparseable, dot after patch)
         zlib = by_name["zlib1g"]
         assert zlib.version_parsed is None
 
@@ -263,7 +263,7 @@ class TestParse:
 
 
 # ---------------------------------------------------------------------------
-# _try_parse_semver() — version parsing
+# _try_parse_semver() - version parsing
 # ---------------------------------------------------------------------------
 
 
@@ -322,11 +322,11 @@ class TestTryParseSemver:
         assert self._p("") is None
 
     def test_returns_none_for_version_with_dot_after_patch(self) -> None:
-        # dfsg versions: 1.2.11.dfsg-2ubuntu9 — dot after patch before prerelease
+        # dfsg versions: 1.2.11.dfsg-2ubuntu9 - dot after patch before prerelease
         assert self._p("1.2.11.dfsg-2ubuntu9") is None
 
     def test_returns_none_for_ubuntu_suffix_without_separator(self) -> None:
-        # 3.118ubuntu5 — no dash/tilde before 'ubuntu'
+        # 3.118ubuntu5 - no dash/tilde before 'ubuntu'
         assert self._p("3.118ubuntu5") is None
 
     def test_returns_none_for_complex_dfsg_with_epoch(self) -> None:

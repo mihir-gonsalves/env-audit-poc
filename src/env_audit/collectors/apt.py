@@ -36,10 +36,10 @@ __all__ = ["AptCollector"]
 #   python3.11/jammy-updates,jammy-security 3.11.6-1~22.04 amd64 [installed,automatic]
 _LINE_RE = re.compile(
     r"^(?P<name>[^/\s]+)"           # package name (no slash, no space)
-    r"/(?P<source>\S+)"             # /source(s) — may be comma-separated
+    r"/(?P<source>\S+)"             # /source(s) - may be comma-separated
     r"\s+(?P<version>\S+)"          # version string
     r"\s+(?P<arch>\S+)"             # architecture
-    r"\s+\[(?P<status>[^\]]+)\]"    # [status] — e.g. installed, installed,automatic
+    r"\s+\[(?P<status>[^\]]+)\]"    # [status] - e.g. installed, installed,automatic
 )
 
 # Best-effort SemVer extraction from Debian/Ubuntu version strings, e.g.:

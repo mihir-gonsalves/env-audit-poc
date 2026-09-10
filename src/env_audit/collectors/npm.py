@@ -88,7 +88,7 @@ class NpmCollector(Collector):
             raise CollectorTimeoutError(self.ecosystem, self.DEFAULT_TIMEOUT)
 
         # npm exits 1 when a package has unmet peer deps but still outputs
-        # valid JSON — treat exit codes > 1 as hard failures.
+        # valid JSON - treat exit codes > 1 as hard failures.
         if result.returncode > 1:
             raise CollectorParseError(
                 self.ecosystem,

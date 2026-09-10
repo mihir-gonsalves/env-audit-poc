@@ -80,7 +80,7 @@ class SemVer(BaseModel):
         if self.prerelease is not None and other.prerelease is None:
             return True   # self is prerelease, other is release -> self < other
 
-        # Both have prerelease or both don't — compare lexicographically.
+        # Both have prerelease or both don't - compare lexicographically.
         return (self.prerelease or "") < (other.prerelease or "")
 
     def __hash__(self) -> int:

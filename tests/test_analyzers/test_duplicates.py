@@ -118,7 +118,7 @@ class TestCrossEcosystemDuplicate:
 
 
 # ---------------------------------------------------------------------------
-# DuplicateAnalyzer — no-finding cases
+# DuplicateAnalyzer - no-finding cases
 # ---------------------------------------------------------------------------
 
 
@@ -144,7 +144,7 @@ class TestDuplicateAnalyzerNoFindings:
 
 
 # ---------------------------------------------------------------------------
-# DuplicateAnalyzer — finding cases
+# DuplicateAnalyzer - finding cases
 # ---------------------------------------------------------------------------
 
 

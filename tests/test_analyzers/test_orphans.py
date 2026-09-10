@@ -125,7 +125,7 @@ class TestOrphanedBinaryFinding:
 
 
 # ---------------------------------------------------------------------------
-# OrphanedBinaryAnalyzer — no-finding cases
+# OrphanedBinaryAnalyzer - no-finding cases
 # ---------------------------------------------------------------------------
 
 
@@ -141,7 +141,7 @@ class TestOrphanedBinaryAnalyzerNoFindings:
         """
         Step 1 branch: ``managed_names.add(pkg.name)`` protects by name.
         A manual binary named 'git' is suppressed because an apt package
-        is also named 'git' — even if that apt package has no binary records.
+        is also named 'git' - even if that apt package has no binary records.
         """
         packages = [
             _pkg("git", "apt"),                          # no binary records
@@ -176,7 +176,7 @@ class TestOrphanedBinaryAnalyzerNoFindings:
 
 
 # ---------------------------------------------------------------------------
-# OrphanedBinaryAnalyzer — finding cases
+# OrphanedBinaryAnalyzer - finding cases
 # ---------------------------------------------------------------------------
 
 

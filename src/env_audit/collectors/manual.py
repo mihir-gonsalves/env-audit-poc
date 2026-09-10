@@ -16,11 +16,18 @@ Version detection is intentionally not attempted. Executing binaries to
 extract version information (e.g., via ``--version``) is avoided for safety,
 so ``version_raw`` and ``version_parsed`` are always ``None``.
 
+"Manual" is a claim about provenance, not a permanent label.  A binary in
+``~/.local/bin`` may in fact have been placed there by ``pip install --user``.
+This collector cannot know that - collectors are independent and never
+consult one another - so it reports what it sees.  The ``Normalizer``
+resolves the overlap afterwards by dropping manual records whose binary
+paths another ecosystem claims from a manifest.  See
+``MANUAL_ECOSYSTEM`` and ``Normalizer.normalize()``.
+
 Tested against a temporary filesystem fixture; never reads the live system
 during tests.
 """
 
-import stat
 from pathlib import Path
 
 from env_audit.models import (
@@ -31,42 +38,21 @@ from env_audit.models import (
 )
 
 from .base import Collector, CollectorUnavailableError
+from .fsutil import is_executable_file, is_symlink, symlink_target
 
-__all__ = ["ManualBinaryCollector"]
+__all__ = ["MANUAL_ECOSYSTEM", "ManualBinaryCollector"]
 
-# Default directories to scan — callers may override via the constructor.
+#: Ecosystem identifier for unmanaged binaries.  Defined here (rather than
+#: as a bare string literal in each consumer) because the normalizer and the
+#: orphan analyzer both need to special-case it.
+MANUAL_ECOSYSTEM = "manual"
+
+# Default directories to scan - callers may override via the constructor.
 DEFAULT_SCAN_DIRS: tuple[str, ...] = (
     "/usr/local/bin",
     str(Path.home() / "bin"),
     str(Path.home() / ".local" / "bin"),
 )
-
-
-def _is_executable_file(path: Path) -> bool:
-    """Return True if *path* is a regular file with any execute bit set."""
-    try:
-        st = path.stat()
-        return stat.S_ISREG(st.st_mode) and bool(st.st_mode & 0o111)
-    except OSError:
-        return False
-
-
-def _is_symlink(path: Path) -> bool:
-    """Return True if *path* is a symbolic link (lstat does not follow)."""
-    try:
-        return path.is_symlink()
-    except OSError:
-        return False
-
-
-def _symlink_target(path: Path) -> str | None:
-    """Return the symlink target as a string, or None if not a symlink."""
-    try:
-        if path.is_symlink():
-            return str(path.resolve())
-    except OSError:
-        pass
-    return None
 
 
 class ManualBinaryCollector(Collector):
@@ -88,14 +74,14 @@ class ManualBinaryCollector(Collector):
 
     @property
     def ecosystem(self) -> str:
-        return "manual"
+        return MANUAL_ECOSYSTEM
 
     def is_available(self) -> bool:
         """
         Return True if at least one scan directory exists on this system.
 
         This collector is considered available whenever it can find any
-        directory to scan — it does not require a specific binary in PATH.
+        directory to scan - it does not require a specific binary in PATH.
         """
         return any(Path(d).is_dir() for d in self._scan_dirs)
 
@@ -107,7 +93,7 @@ class ManualBinaryCollector(Collector):
         Raises ``CollectorUnavailableError`` only when *none* of the
         configured directories exist.
 
-        Never raises for individual file errors — unreadable files are
+        Never raises for individual file errors - unreadable files are
         skipped gracefully.
         """
         if not self.is_available():
@@ -142,11 +128,11 @@ class ManualBinaryCollector(Collector):
             return []
 
         for entry in entries:
-            if not _is_executable_file(entry):
+            if not is_executable_file(entry):
                 continue
 
-            is_sym = _is_symlink(entry)
-            target = _symlink_target(entry) if is_sym else None
+            is_sym = is_symlink(entry)
+            target = symlink_target(entry) if is_sym else None
 
             binary = BinaryRecord(
                 name=entry.name,

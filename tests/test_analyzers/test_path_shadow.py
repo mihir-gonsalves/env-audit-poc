@@ -151,7 +151,7 @@ class TestShadowedBinaryFinding:
 
 
 # ---------------------------------------------------------------------------
-# PathShadowAnalyzer — no-finding cases
+# PathShadowAnalyzer - no-finding cases
 # ---------------------------------------------------------------------------
 
 
@@ -173,7 +173,7 @@ class TestPathShadowAnalyzerNoFindings:
 
 
 # ---------------------------------------------------------------------------
-# PathShadowAnalyzer — finding cases
+# PathShadowAnalyzer - finding cases
 # ---------------------------------------------------------------------------
 
 
@@ -357,3 +357,59 @@ class TestRank:
     def test_returns_zero_when_path_dirs_is_empty(self) -> None:
         """With no PATH components len([]) == 0, so the fallback rank is 0."""
         assert PathShadowAnalyzer._rank("/usr/bin/git", []) == 0
+
+# ---------------------------------------------------------------------------
+# Duplicate paths are one file, not a shadow
+# ---------------------------------------------------------------------------
+
+
+class TestDuplicatePathDeduplication:
+    """
+    Since ``PipCollector`` attributes console scripts, the same absolute
+    path can be reported by two records (a pip package and a manual scan of
+    the directory it installed into).  A file cannot shadow itself.
+    """
+
+    def test_same_path_in_two_records_produces_no_finding(self) -> None:
+        path = "/home/u/.local/bin/pytest"
+        packages = [
+            _pkg("pytest", [_binary("pytest", path)], ecosystem="pip"),
+            _pkg("pytest", [_binary("pytest", path)], ecosystem="manual"),
+        ]
+        assert PathShadowAnalyzer(path="/home/u/.local/bin").analyze(packages) == []
+
+    def test_same_path_repeated_within_one_record(self) -> None:
+        path = "/usr/local/bin/tool"
+        pkg = _pkg("tool", [_binary("tool", path), _binary("tool", path)])
+        assert PathShadowAnalyzer(path="/usr/local/bin").analyze([pkg]) == []
+
+    def test_genuine_collision_still_reported(self) -> None:
+        packages = [
+            _pkg("a", [_binary("tool", "/usr/local/bin/tool")], ecosystem="pip"),
+            _pkg("b", [_binary("tool", "/home/u/bin/tool")], ecosystem="manual"),
+        ]
+        findings = PathShadowAnalyzer(path="/usr/local/bin:/home/u/bin").analyze(packages)
+        assert len(findings) == 1
+        assert findings[0].winner_path == "/usr/local/bin/tool"
+        assert findings[0].shadowed_paths == ("/home/u/bin/tool",)
+
+    def test_duplicate_path_never_appears_in_shadowed_paths(self) -> None:
+        duplicated = "/usr/local/bin/tool"
+        packages = [
+            _pkg("a", [_binary("tool", duplicated)], ecosystem="pip"),
+            _pkg("b", [_binary("tool", duplicated)], ecosystem="manual"),
+            _pkg("c", [_binary("tool", "/home/u/bin/tool")], ecosystem="manual"),
+        ]
+        findings = PathShadowAnalyzer(path="/usr/local/bin:/home/u/bin").analyze(packages)
+        assert len(findings) == 1
+        assert findings[0].shadowed_paths == ("/home/u/bin/tool",)
+
+    def test_first_record_supplies_the_winner_package_name(self) -> None:
+        duplicated = "/usr/local/bin/tool"
+        packages = [
+            _pkg("owner", [_binary("tool", duplicated)], ecosystem="pip"),
+            _pkg("scanner", [_binary("tool", duplicated)], ecosystem="manual"),
+            _pkg("other", [_binary("tool", "/home/u/bin/tool")], ecosystem="manual"),
+        ]
+        findings = PathShadowAnalyzer(path="/usr/local/bin:/home/u/bin").analyze(packages)
+        assert findings[0].winner_package == "owner"

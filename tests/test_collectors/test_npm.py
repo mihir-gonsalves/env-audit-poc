@@ -4,7 +4,7 @@
 
 Design principles
 -----------------
-* All subprocess interaction is mocked — tests never touch the live system.
+* All subprocess interaction is mocked - tests never touch the live system.
 * The fixture file (tests/fixtures/npm/global.json) represents real
   ``npm list -g --json`` output and exercises the full parsing path.
 * Each conditional branch in collect(), _parse(), and _try_parse_semver()
@@ -67,7 +67,7 @@ class TestIsAvailable:
 
 
 # ---------------------------------------------------------------------------
-# collect() — subprocess layer
+# collect() - subprocess layer
 # ---------------------------------------------------------------------------
 
 
@@ -137,7 +137,7 @@ class TestCollect:
 
 
 # ---------------------------------------------------------------------------
-# _parse() — output parsing
+# _parse() - output parsing
 # ---------------------------------------------------------------------------
 
 

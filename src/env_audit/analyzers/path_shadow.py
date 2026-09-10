@@ -6,9 +6,13 @@ Identifies binary name collisions across packages and determines which
 binary "wins" based on the directories' positions in ``PATH`` at audit
 time.
 
-Note: Only ``PackageRecord.binaries`` entries are inspected.  In the
-current implementation, only ``ManualBinaryCollector`` populates binary
-records; apt/pip/npm records carry an empty ``binaries`` list.
+Note: Only ``PackageRecord.binaries`` entries are inspected.
+``ManualBinaryCollector`` populates them from a directory scan, and
+``PipCollector`` populates them from each package's ``RECORD`` manifest;
+apt and npm records currently carry an empty ``binaries`` list.
+
+A collision is counted by *distinct path*, not by entry.  The same path
+reported twice is one file, not a shadow of itself.
 """
 
 from __future__ import annotations
@@ -76,19 +80,23 @@ class PathShadowAnalyzer(Analyzer):
         """Return one finding per binary name that has more than one path."""
         path_dirs = self._path_dirs()
 
-        # Collect all binary records: name -> [(binary_path, package_name)]
-        binary_map: dict[str, list[tuple[str, str]]] = defaultdict(list)
+        # Collect all binary records: name -> {binary_path: package_name}.
+        # Keying by path deduplicates: two records naming the same file
+        # (e.g. a manual record the normalizer did not suppress alongside
+        # its pip owner) is one file, not a shadow of itself.  The first
+        # record to claim a path supplies the package name.
+        binary_map: dict[str, dict[str, str]] = defaultdict(dict)
         for pkg in packages:
             for binary in pkg.binaries:
-                binary_map[binary.name].append((binary.path, pkg.name))
+                binary_map[binary.name].setdefault(binary.path, pkg.name)
 
         findings: list[Finding] = []
-        for binary_name, entries in sorted(binary_map.items()):
-            if len(entries) < 2:
+        for binary_name, by_path in sorted(binary_map.items()):
+            if len(by_path) < 2:
                 continue
 
             sorted_entries = sorted(
-                entries,
+                by_path.items(),
                 key=lambda e: self._rank(e[0], path_dirs),
             )
             winner_path, winner_package = sorted_entries[0]
